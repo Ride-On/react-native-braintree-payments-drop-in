@@ -29,16 +29,16 @@ RCT_REMAP_METHOD(show,
 
     BTDropInRequest *request = [[BTDropInRequest alloc] init];
 
-    if (!options[@"disabledVaultManager"]) {
+    if([options[@"vaultManager"] boolValue]){
         request.vaultManager = YES;
     }
 
-     if (!options[@"vaultCard"]) {
+    if([options[@"vaultCard"] boolValue]){
         request.vaultCard = YES;
     }
 
-     if (!options[@"allowVaultCardOverride"]) {
-        request.allowVaultCardOverride = YES;
+    if([options[@"allowVaultCardOverride"] boolValue]){
+           request.allowVaultCardOverride = YES;
     }
 
     NSDictionary* threeDSecureOptions = options[@"threeDSecure"];
