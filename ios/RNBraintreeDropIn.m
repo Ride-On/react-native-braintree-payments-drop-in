@@ -33,6 +33,14 @@ RCT_REMAP_METHOD(show,
         request.vaultManager = YES;
     }
 
+     if (!options[@"vaultCard"]) {
+        request.vaultCard = YES;
+    }
+
+     if (!options[@"allowVaultCardOverride"]) {
+        request.allowVaultCardOverride = YES;
+    }
+
     NSDictionary* threeDSecureOptions = options[@"threeDSecure"];
     if (threeDSecureOptions) {
         NSNumber* threeDSecureAmount = threeDSecureOptions[@"amount"];
