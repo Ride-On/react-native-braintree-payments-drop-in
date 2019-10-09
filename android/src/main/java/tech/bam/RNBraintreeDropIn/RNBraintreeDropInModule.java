@@ -50,25 +50,22 @@ public class RNBraintreeDropInModule extends ReactContextBaseJavaModule {
       return;
     }
 
-    boolean disabledVaultManager = !options.hasKey("disabledVaultManager")
-            || (options.hasKey("disabledVaultManager")
-            && !options.getBoolean("disabledVaultManager"));
-
-    boolean vaultCard = !options.hasKey("vaultCard")
-            || (options.hasKey("vaultCard")
-            && !options.getBoolean("vaultCard"));
-
-    boolean allowVaultCardOverride = !options.hasKey("allowVaultCardOverride")
-            || (options.hasKey("allowVaultCardOverride")
-            && !options.getBoolean("allowVaultCardOverride"));        
-
     DropInRequest dropInRequest = new DropInRequest()
-            .vaultManager(disabledVaultManager)
-            .vaultCard(vaultCard)
-            .allowVaultCardOverride(allowVaultCardOverride)
             .clientToken(options.getString("clientToken"));
 
     enableGooglePay(dropInRequest, options);
+
+    if (options.hasKey("vaultManager")) {
+     dropInRequest.vaultManager(options.getBoolean("vaultManager"));
+    }
+
+     if(options.hasKey("vaultCard")) {
+      dropInRequest.vaultCard(options.getBoolean("vaultCard"));
+    }
+
+     if(options.hasKey("allowVaultCardOverride")) {
+      dropInRequest.allowVaultCardOverride(options.getBoolean("allowVaultCardOverride"));
+    }
 
     if (options.hasKey("threeDSecure")) {
       final ReadableMap threeDSecureOptions = options.getMap("threeDSecure");
