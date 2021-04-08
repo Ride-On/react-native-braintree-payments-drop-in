@@ -29,7 +29,7 @@ RCT_REMAP_METHOD(show,
 
     BTDropInRequest *request = [[BTDropInRequest alloc] init];
 
-    request.cardholderNameSetting = YES;
+    request.cardholderNameSetting = BTFormFieldRequired;
 
     if([options[@"vaultManager"] boolValue]){
         request.vaultManager = YES;

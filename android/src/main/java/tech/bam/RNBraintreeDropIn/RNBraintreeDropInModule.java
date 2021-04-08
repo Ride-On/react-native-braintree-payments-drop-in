@@ -21,6 +21,7 @@ import com.braintreepayments.api.models.CardNonce;
 import com.braintreepayments.api.models.ThreeDSecureInfo;
 import com.google.android.gms.wallet.TransactionInfo;
 import com.google.android.gms.wallet.WalletConstants;
+import com.braintreepayments.cardform.view.CardForm;
 
 
 public class RNBraintreeDropInModule extends ReactContextBaseJavaModule {
@@ -55,7 +56,7 @@ public class RNBraintreeDropInModule extends ReactContextBaseJavaModule {
 
     enableGooglePay(dropInRequest, options);
 
-    dropInRequest.cardholderNameStatus(1);
+    dropInRequest.cardholderNameStatus(CardForm.FIELD_REQUIRED);
 
     if (options.hasKey("vaultManager")) {
      dropInRequest.vaultManager(options.getBoolean("vaultManager"));
