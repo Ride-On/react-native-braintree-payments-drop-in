@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name         = "RNBraintreeDropIn"
-  s.version      = "1.2.8"
+  s.version      = "1.2.9"
   s.summary      = "RNBraintreeDropIn"
   s.description  = <<-DESC
                   RNBraintreeDropIn
