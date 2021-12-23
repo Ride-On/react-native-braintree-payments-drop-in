@@ -35,7 +35,7 @@ RCT_REMAP_METHOD(show,
     BTUIKAppearance.sharedInstance.postalCodeFormFieldKeyboardType = UIKeyboardTypeNamePhonePad;
 
     BTDropInRequest *request = [[BTDropInRequest alloc] init];
-    request.threeDSecureVerification = YES;
+
     request.cardholderNameSetting = BTFormFieldRequired;
 
     if (!options[@"disableVaultManager"]) {
@@ -58,29 +58,12 @@ RCT_REMAP_METHOD(show,
 
     BTThreeDSecureRequest *threeDSecureRequest = [[BTThreeDSecureRequest alloc] init];
     threeDSecureRequest.amount = [NSDecimalNumber decimalNumberWithString:threeDSecureOptions[@"amount"]];
-    //threeDSecureRequest.email = threeDSecureOptions[@"email"];
     threeDSecureRequest.versionRequested = BTThreeDSecureVersion2;
     threeDSecureRequest.challengeRequested = YES;
-
-    /*BTThreeDSecurePostalAddress *address = [BTThreeDSecurePostalAddress new];
-    address.givenName = threeDSecureOptions[@"firstName"];
-    address.surname = threeDSecureOptions[@"lastName"];
-    address.phoneNumber = threeDSecureOptions[@"phoneNumber"];
-    address.streetAddress = threeDSecureOptions[@"streetAddress"];
-    address.extendedAddress = threeDSecureOptions[@"streetAddress2"];
-    address.locality = threeDSecureOptions[@"city"];
-    address.region = threeDSecureOptions[@"region"];
-    address.postalCode = threeDSecureOptions[@"postalCode"];
-    address.countryCodeAlpha2 = threeDSecureOptions[@"countryCode"];
-    threeDSecureRequest.billingAddress = address;*/
 
     self.apiClient = [[BTAPIClient alloc] initWithAuthorization:clientToken];
     self.dataCollector = [[BTDataCollector alloc] initWithAPIClient:self.apiClient];
     BTDataCollector *dataCollector = self.dataCollector;
-
-    /*BTThreeDSecureAdditionalInformation *additionalInformation = [BTThreeDSecureAdditionalInformation new];
-    additionalInformation.shippingAddress = address;
-    threeDSecureRequest.additionalInformation = additionalInformation;*/
 
     request.threeDSecureRequest = threeDSecureRequest;
 
@@ -89,7 +72,7 @@ RCT_REMAP_METHOD(show,
 
             if (error != nil) {
                 reject(error.localizedDescription, error.localizedDescription, error);
-            } else if (result.cancelled) {
+            } else if (result.isCanceled) {
                 reject(@"USER_CANCELLATION", @"The user cancelled", nil);
             } else {
                 if (threeDSecureOptions && [result.paymentMethod isKindOfClass:[BTCardNonce class]]) {
@@ -103,7 +86,7 @@ RCT_REMAP_METHOD(show,
                                             resolver: resolve
                                        dataCollector: dataCollector];
                     }
-                } else if (result.paymentOptionType == BTUIKPaymentOptionTypeApplePay) {
+                } else if (result.paymentMethodType == BTDropInPaymentMethodTypeApplePay) {
                     if (!options[@"companyName"]) {
                         reject(@"NO_COMPANY_NAME", @"You must provide a company name", nil);
                         return;
@@ -144,10 +127,8 @@ RCT_REMAP_METHOD(show,
     [jsResult setObject:result.paymentMethod.type forKey:@"type"];
     [jsResult setObject:result.paymentDescription forKey:@"description"];
     [jsResult setObject:[NSNumber numberWithBool:result.paymentMethod.isDefault] forKey:@"isDefault"];
-    [dataCollector collectFraudData:^(NSString * _Nonnull deviceData) {
-        [jsResult setObject:deviceData forKey:@"deviceData"];
-        resolve(jsResult);
-    }];
+    [dataCollector collectDeviceData: ^(NSString * _Nonnull deviceData) {[jsResult setObject:deviceData forKey:@"deviceData"];
+        resolve(jsResult); } ];
 }
 
 - (void)setupPaymentRequest:(void (^)(PKPaymentRequest * _Nullable, NSError * _Nullable))completion options:(NSDictionary*)options {
@@ -175,7 +156,6 @@ RCT_REMAP_METHOD(show,
         paymentRequest.merchantCapabilities = PKMerchantCapability3DS;
         paymentRequest.paymentSummaryItems =
         @[
-            //[PKPaymentSummaryItem summaryItemWithLabel:options[@"itemName"] amount:[NSDecimalNumber decimalNumberWithString:threeDSecureOptions[@"amount"]]],
             // Add add'l payment summary items...
             [PKPaymentSummaryItem summaryItemWithLabel:options[@"companyName"] amount:[NSDecimalNumber decimalNumberWithString:[NSString stringWithFormat:@"%@", threeDSecureOptions[@"amount"]]]]
         ];
@@ -198,9 +178,10 @@ RCT_REMAP_METHOD(show,
     return modalRoot;
 }
 
+
 - (void)paymentAuthorizationViewController:(PKPaymentAuthorizationViewController *)controller
                        didAuthorizePayment:(PKPayment *)payment
-                                completion:(void (^)(PKPaymentAuthorizationStatus))completion {
+                                   handler:(void (^)(PKPaymentAuthorizationResult *result))completion {
     [self setIsApplePaymentAuthorized: YES];
     // Example: Tokenize the Apple Pay payment
     BTApplePayClient *applePayClient = [[BTApplePayClient alloc]
@@ -213,27 +194,37 @@ RCT_REMAP_METHOD(show,
             
             NSMutableDictionary* jsResult = [NSMutableDictionary new];
             [jsResult setObject:tokenizedApplePayPayment.nonce forKey:@"nonce"];
-            [jsResult setObject:tokenizedApplePayPayment.localizedDescription forKey:@"type"];
+            [jsResult setObject:@"Apple Pay" forKey:@"type"];
             [jsResult setObject:tokenizedApplePayPayment.type forKey:@"description"];
             [jsResult setObject:payment.billingContact.postalAddress.postalCode forKey:@"billingPostalCode"];
-            [self.dataCollector collectFraudData:^(NSString * _Nonnull deviceData) {
+            [self.dataCollector collectDeviceData:^(NSString * _Nonnull deviceData) {
                 [jsResult setObject:deviceData forKey:@"deviceData"];
                 self.resolve(jsResult);
                 self.resolve = NULL;
                 self.reject = NULL;
-                completion(PKPaymentAuthorizationStatusSuccess);
+                // completion(PKPaymentAuthorizationStatusSuccess);
+                PKPaymentAuthorizationResult *successResult =
+                        [[PKPaymentAuthorizationResult alloc] initWithStatus:PKPaymentAuthorizationStatusSuccess
+                                                                      errors:nil];
+
+                    completion(successResult);
             }];
         } else {
             // Tokenization failed. Check `error` for the cause of the failure.
             self.reject(error.localizedDescription, error.localizedDescription, error);
             // Indicate failure via the completion callback:
-            completion(PKPaymentAuthorizationStatusFailure);
+            PKPaymentAuthorizationResult *errorResult =
+                      [[PKPaymentAuthorizationResult alloc] initWithStatus:PKPaymentAuthorizationStatusFailure
+                                                                    errors:@[ error ]];
+
+                  completion(errorResult);
+           
         
         self.resolve = NULL;
         self.reject = NULL;
         }
     }];
-}
+};
 
 - (void)paymentAuthorizationViewControllerDidFinish:(nonnull PKPaymentAuthorizationViewController *)controller {
     [self.reactRoot dismissViewControllerAnimated:YES completion:NULL];
@@ -249,4 +240,3 @@ RCT_REMAP_METHOD(show,
 }
 
 @end
-

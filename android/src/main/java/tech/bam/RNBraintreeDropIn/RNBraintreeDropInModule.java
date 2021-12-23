@@ -4,17 +4,12 @@ import android.app.Activity;
 import android.content.Intent;
 import android.util.Log;
 
+
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.FragmentActivity;
 
-import com.braintreepayments.api.BraintreeFragment;
-import com.braintreepayments.api.DataCollector;
-import com.braintreepayments.api.exceptions.InvalidArgumentException;
-import com.braintreepayments.api.interfaces.BraintreeResponseListener;
-import com.braintreepayments.api.models.GooglePaymentRequest;
-import com.braintreepayments.api.models.ThreeDSecureAdditionalInformation;
-import com.braintreepayments.api.models.ThreeDSecurePostalAddress;
-import com.braintreepayments.api.models.ThreeDSecureRequest;
+
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
@@ -22,16 +17,21 @@ import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.bridge.BaseActivityEventListener;
-import com.braintreepayments.api.dropin.DropInActivity;
-import com.braintreepayments.api.dropin.DropInRequest;
-import com.braintreepayments.api.dropin.DropInResult;
-import com.braintreepayments.api.models.PaymentMethodNonce;
-import com.braintreepayments.api.models.CardNonce;
-import com.braintreepayments.api.models.ThreeDSecureInfo;
-import com.google.android.gms.wallet.TransactionInfo;
-import com.google.android.gms.wallet.WalletConstants;
 import com.facebook.react.bridge.Promise;
+
+
+import com.braintreepayments.api.CardNonce;
+import com.braintreepayments.api.DropInClient;
+import com.braintreepayments.api.DropInPaymentMethod;
+import com.braintreepayments.api.DropInRequest;
+import com.braintreepayments.api.DropInResult;
+import com.braintreepayments.api.BraintreeClient;
+import com.braintreepayments.api.DataCollector;
+import com.braintreepayments.api.ThreeDSecureInfo;
+import com.braintreepayments.api.PaymentMethodNonce;
+import com.braintreepayments.api.ThreeDSecureRequest;
 import com.braintreepayments.cardform.view.CardForm;
+import com.braintreepayments.api.InvalidArgumentException;
 
 
 public class RNBraintreeDropInModule extends ReactContextBaseJavaModule {
@@ -39,6 +39,9 @@ public class RNBraintreeDropInModule extends ReactContextBaseJavaModule {
     private Promise mPromise;
     private String mClientToken;
     private static final int DROP_IN_REQUEST = 0x444;
+    private PaymentMethodNonce nonce;
+    private BraintreeClient braintreeClient;
+    private DataCollector dataCollector;
 
     RNBraintreeDropInModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -53,11 +56,13 @@ public class RNBraintreeDropInModule extends ReactContextBaseJavaModule {
 
                 if (resultCode == Activity.RESULT_OK) {
                     DropInResult result = data.getParcelableExtra(DropInResult.EXTRA_DROP_IN_RESULT);
-                    PaymentMethodNonce paymentMethodNonce = result.getPaymentMethodNonce();
+                    nonce = result.getPaymentMethodNonce();
 
-                    if (paymentMethodNonce instanceof CardNonce) {
-                        CardNonce cardNonce = (CardNonce) paymentMethodNonce;
+                    if (nonce instanceof CardNonce) {
+                        CardNonce cardNonce = (CardNonce) nonce;
                         ThreeDSecureInfo threeDSecureInfo = cardNonce.getThreeDSecureInfo();
+                        resolvePayment(result, activity);
+
                         if (!threeDSecureInfo.isLiabilityShiftPossible()) {
                             mPromise.reject("3DSECURE_NOT_ABLE_TO_SHIFT_LIABILITY", "3D Secure liability cannot be shifted");
                             return;
@@ -66,28 +71,30 @@ public class RNBraintreeDropInModule extends ReactContextBaseJavaModule {
                             return;
                         }
                     }
-                    resolvePayment(paymentMethodNonce, activity);
+
+
                 } else if (resultCode == Activity.RESULT_CANCELED) {
                     mPromise.reject("USER_CANCELLATION", "The user cancelled");
                     mPromise = null;
                 } else {
-                    Exception exception = (Exception) data.getSerializableExtra(DropInActivity.EXTRA_ERROR);
+                    Exception exception = (Exception) data.getSerializableExtra(DropInResult.EXTRA_ERROR);
                     mPromise.reject(exception.getMessage(), exception.getMessage());
                     mPromise = null;
                 }
+
             }
         });
     }
 
     @ReactMethod
     public void show(final ReadableMap options, final Promise promise) {
+
         if (!options.hasKey("clientToken")) {
             promise.reject("NO_CLIENT_TOKEN", "You must provide a client token");
             return;
         } else {
             mClientToken = options.getString("clientToken");
         }
-
 
         Activity currentActivity = getCurrentActivity();
         if (currentActivity == null) {
@@ -112,89 +119,63 @@ public class RNBraintreeDropInModule extends ReactContextBaseJavaModule {
                 && !options.getBoolean("disabledValidate"));*/
 
 
-        final ReadableMap threeDSecureOptions = options.getMap("threeDSecure");
-        if (threeDSecureOptions == null) {
-            promise.reject("THREEDSECURE_IS_NULL", "3D Secure options were not provided");
-            return;
-        }
-
-        // final ThreeDSecurePostalAddress address;
-        // try {
-        //     address = new ThreeDSecurePostalAddress()
-        //             .givenName(threeDSecureOptions.getString("firstName"))
-        //             .surname(threeDSecureOptions.getString("lastName"))
-        //             .phoneNumber(threeDSecureOptions.getString("phoneNumber"))
-        //             .streetAddress(threeDSecureOptions.getString("streetAddress"))
-        //             .extendedAddress(threeDSecureOptions.getString("streetAddress2"))
-        //             .locality(threeDSecureOptions.getString("city"))
-        //             .region(threeDSecureOptions.getString("region"))
-        //             .postalCode(threeDSecureOptions.getString("postalCode"))
-        //             .countryCodeAlpha2(threeDSecureOptions.getString("countryCode"));
-        // } catch (Exception error) {
-        //     promise.reject("ADDRESS_ERROR", "Failed to prepare address");
-        //     return;
-        // }
-
-        // ThreeDSecureAdditionalInformation additionalInformation = new ThreeDSecureAdditionalInformation()
-        //         .shippingAddress(address);
-
-
-        ThreeDSecureRequest threeDSecureRequest;
         try {
-            threeDSecureRequest = new ThreeDSecureRequest()
-                    .amount(threeDSecureOptions.getString("amount"))
-                    //.email(threeDSecureOptions.getString("email"))
-                    //.billingAddress(address)
-                    .challengeRequested(true)
-                    .versionRequested(ThreeDSecureRequest.VERSION_2);
-                    //.additionalInformation(additionalInformation);
-        } catch (Exception error) {
-            promise.reject("THREEDSECURE_FAILED", error.getMessage());
-            return;
-        }
 
-        //.shouldValidate(validate)
-        DropInRequest dropInRequest = new DropInRequest()
-                .requestThreeDSecureVerification(true)
-                .threeDSecureRequest(threeDSecureRequest)
-                .vaultManager(disableVaultManager)
-                .vaultCard(disableVaultCard)
-                .allowVaultCardOverride(disableAllowVaultCardOverride)
-                .cardholderNameStatus(CardForm.FIELD_REQUIRED)
-                .clientToken(options.getString("clientToken"));
+            final ReadableMap threeDSecureOptions = options.getMap("threeDSecure");
 
-        try {
-            String amount = threeDSecureOptions.getString("amount");
-            String currencyCode = options.getString("currencyCode");
-            String merchantId = options.getString("GPayMerchantId");
-            String env = "test".equals(merchantId) ? "TEST" : "PRODUCTION";
-            if (merchantId != null && amount != null && currencyCode != null) {
-                GooglePaymentRequest googlePaymentRequest = new GooglePaymentRequest()
-                        .transactionInfo(TransactionInfo.newBuilder()
-                                .setTotalPrice(amount)
-                                .setTotalPriceStatus(WalletConstants.TOTAL_PRICE_STATUS_FINAL)
-                                .setCurrencyCode(currencyCode)
-                                .build())
-                        .billingAddressRequired(true)
-                        .googleMerchantId(merchantId)
-                        .environment(env);
-                dropInRequest.googlePaymentRequest(googlePaymentRequest);
+            DropInRequest dropInRequest = new DropInRequest();
+
+            dropInRequest.setMaskCardNumber(true);
+            dropInRequest.setMaskSecurityCode(true);
+            dropInRequest.setAllowVaultCardOverride(false);
+            dropInRequest.setVaultCardDefaultValue(false);
+            dropInRequest.setVaultManagerEnabled(false);
+            dropInRequest.setCardholderNameStatus(CardForm.FIELD_REQUIRED);
+
+            if (threeDSecureOptions == null) {
+                promise.reject("THREEDSECURE_IS_NULL", "3D Secure options were not provided");
+                return;
+            } else {
+
+                try {
+
+                    ThreeDSecureRequest threeDSecureRequest = new ThreeDSecureRequest();
+                    threeDSecureRequest.setAmount(threeDSecureOptions.getString("amount"));
+                    threeDSecureRequest.setVersionRequested(ThreeDSecureRequest.VERSION_2);
+                    threeDSecureRequest.setChallengeRequested(true);
+
+                    dropInRequest.setThreeDSecureRequest(threeDSecureRequest);
+
+                } catch (Exception error) {
+                    promise.reject("THREEDSECURE_FAILED", error.getMessage());
+                    return;
+                }
+
             }
-        } catch (Exception ignored) {
+    
+            DropInClient dropInClient = new DropInClient(currentActivity, mClientToken, dropInRequest);
+            dropInClient.launchDropInForResult((FragmentActivity) currentActivity, DROP_IN_REQUEST);
+
+        } catch (Exception error) {
+            promise.reject("DROP_IN_FAILED", error.getMessage());
+            return;
         }
 
         mPromise = promise;
-        currentActivity.startActivityForResult(dropInRequest.getIntent(currentActivity), DROP_IN_REQUEST);
+
     }
 
 
-    private void resolvePayment(PaymentMethodNonce paymentMethodNonce, Activity currentActivity) {
+    private void resolvePayment(DropInResult dropInResult, Activity currentActivity) {
+
         try {
+            nonce = dropInResult.getPaymentMethodNonce();
+            DropInPaymentMethod paymentMethodType = dropInResult.getPaymentMethodType();
             WritableMap jsResult = Arguments.createMap();
-            jsResult.putString("nonce", paymentMethodNonce.getNonce());
-            jsResult.putString("type", paymentMethodNonce.getTypeLabel());
-            jsResult.putString("description", paymentMethodNonce.getDescription());
-            jsResult.putBoolean("isDefault", paymentMethodNonce.isDefault());
+            jsResult.putString("nonce", nonce.getString());
+            jsResult.putString("type", String.valueOf(paymentMethodType.getLocalizedName()));
+            jsResult.putString("description", dropInResult.getPaymentDescription());
+            jsResult.putBoolean("isDefault", nonce.isDefault());
             extractDeviceData(currentActivity, jsResult);
         } catch (NullPointerException ignore) {
             mPromise.reject("PAYMENT_NONCE_RESOLVE_FAILED", "Failed to resolve payment nonce");
@@ -203,23 +184,22 @@ public class RNBraintreeDropInModule extends ReactContextBaseJavaModule {
     }
 
     private void extractDeviceData(Activity currentActivity, final WritableMap jsResult) {
+
         if (currentActivity instanceof AppCompatActivity) {
             try {
-                BraintreeFragment braintreeFragment = BraintreeFragment.newInstance(
-                        (AppCompatActivity) currentActivity,
-                        mClientToken);
-                DataCollector.collectDeviceData(braintreeFragment, new BraintreeResponseListener<String>() {
-                    @Override
-                    public void onResponse(String deviceData) {
+                braintreeClient = new BraintreeClient(currentActivity, mClientToken);
+                dataCollector = new DataCollector(braintreeClient);
+                dataCollector.collectDeviceData(currentActivity, (deviceData, error) -> {
+                    // send deviceData to your server
+                    if (deviceData != null) {
                         jsResult.putString("deviceData", deviceData);
-                        mPromise.resolve(jsResult);
-                        mPromise = null;
                     }
+                    if (error != null) {
+                        jsResult.putString("error", String.valueOf(error));
+                    }
+                    mPromise.resolve(jsResult);
+                    mPromise = null;
                 });
-            } catch (InvalidArgumentException e) {
-                e.printStackTrace();
-                mPromise.resolve(jsResult);
-                mPromise = null;
             } catch (NullPointerException ignore) {
                 mPromise.reject("PAYMENT_NONCE_RESOLVE_FAILED", "Failed to resolve payment nonce");
             }
