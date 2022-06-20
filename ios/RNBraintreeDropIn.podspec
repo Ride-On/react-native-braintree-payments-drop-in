@@ -16,5 +16,4 @@ Pod::Spec.new do |s|
 
   s.dependency "React"
   s.dependency "BraintreeDropIn", '~> 9.6.0'
-  s.dependency "Braintree/DataCollector"
 end
