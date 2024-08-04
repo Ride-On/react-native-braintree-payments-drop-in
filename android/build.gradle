@@ -32,9 +32,9 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.braintreepayments.api:drop-in:6.7.0'
+    implementation 'com.braintreepayments.api:drop-in:6.16.0'
     implementation 'com.facebook.react:react-native:+'
-    implementation 'com.braintreepayments.api:three-d-secure:4.23.1'
-    implementation 'com.braintreepayments.api:card:4.23.1'
+    implementation 'com.braintreepayments.api:three-d-secure:4.45.0'
+    implementation 'com.braintreepayments.api:card:4.45.0'
     implementation 'com.google.android.gms:play-services-wallet:19.1.0'
 }
